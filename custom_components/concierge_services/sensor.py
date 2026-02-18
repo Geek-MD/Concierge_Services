@@ -4,7 +4,7 @@ from __future__ import annotations
 import email
 import imaplib
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from email.header import decode_header
 from typing import Any
 
@@ -26,6 +26,7 @@ from .const import (
     CONF_PASSWORD,
     CONF_SERVICES,
 )
+from .attribute_extractor import extract_attributes_from_email_body
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -109,12 +110,10 @@ class ConciergeServicesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             for service_id in configured_services:
                 service_meta = services_metadata.get(service_id, {})
                 
-                # Search for emails matching this service
-                latest_date = self._find_latest_email_for_service(imap, service_id, service_meta)
+                # Search for emails matching this service and extract attributes
+                service_data = self._find_latest_email_for_service(imap, service_id, service_meta)
                 
-                result["services"][service_id] = {
-                    "last_updated": latest_date,
-                }
+                result["services"][service_id] = service_data
             
         except imaplib.IMAP4.error as err:
             _LOGGER.warning(
@@ -143,8 +142,13 @@ class ConciergeServicesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     
     def _find_latest_email_for_service(
         self, imap: imaplib.IMAP4_SSL, service_id: str, service_meta: dict[str, Any]
-    ) -> datetime | None:
-        """Find the latest email date for a service."""
+    ) -> dict[str, Any]:
+        """Find the latest email for a service and extract attributes."""
+        result: dict[str, Any] = {
+            "last_updated": None,
+            "attributes": {},
+        }
+        
         try:
             imap.select("INBOX")
             
@@ -152,7 +156,7 @@ class ConciergeServicesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             status, messages = imap.search(None, "ALL")
             
             if status != "OK":
-                return None
+                return result
             
             email_ids = messages[0].split()
             
@@ -160,6 +164,7 @@ class ConciergeServicesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             email_ids = email_ids[-50:]
             
             latest_date = None
+            latest_attributes: dict[str, Any] = {}
             
             # Get sample from and subject from metadata for matching
             sample_from = service_meta.get("sample_from", "")
@@ -197,12 +202,16 @@ class ConciergeServicesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     if self._matches_service(service_id, service_name, sample_from, sample_subject, 
                                             from_addr, subject, body):
                         # Parse date
+                        email_date = None
                         if date_header:
                             try:
                                 from email.utils import parsedate_to_datetime
                                 email_date = parsedate_to_datetime(date_header)
                                 if latest_date is None or email_date > latest_date:
                                     latest_date = email_date
+                                    
+                                    # Extract attributes from this email
+                                    latest_attributes = extract_attributes_from_email_body(subject, body)
                             except Exception:
                                 pass
                         
@@ -214,11 +223,14 @@ class ConciergeServicesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     _LOGGER.debug("Error processing email %s: %s", email_id, err)
                     continue
             
-            return latest_date
+            result["last_updated"] = latest_date
+            result["attributes"] = latest_attributes
+            
+            return result
         
         except Exception as err:
             _LOGGER.debug("Error finding latest email for service: %s", err)
-            return None
+            return result
     
     def _get_email_body(self, msg: email.message.Message) -> str:
         """Extract text content from email body."""
@@ -378,6 +390,19 @@ class ConciergeServiceSensor(CoordinatorEntity[ConciergeServicesCoordinator], Se
                 last_updated = service_data.get("last_updated")
                 if last_updated:
                     attrs["last_updated_datetime"] = last_updated.isoformat()
+                
+                # Add extracted attributes from email
+                extracted_attrs = service_data.get("attributes", {})
+                if extracted_attrs:
+                    # Add all extracted attributes with a prefix to identify them
+                    for key, value in extracted_attrs.items():
+                        # Skip internal metadata fields
+                        if not key.startswith("_"):
+                            attrs[key] = value
+                    
+                    # Add extraction metadata
+                    if "_attributes_found" in extracted_attrs:
+                        attrs["attributes_extracted_count"] = extracted_attrs["_attributes_found"]
         
         return attrs
 
