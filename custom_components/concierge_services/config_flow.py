@@ -151,6 +151,21 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call
                 "services_metadata": services_metadata,
             }
             
+            # Create persistent notification for new services
+            if selected_services:
+                service_names = [services_metadata[sid]["name"] for sid in selected_services]
+                service_list = "\n".join([f"- {name}" for name in service_names])
+                
+                await self.hass.services.async_call(
+                    "persistent_notification",
+                    "create",
+                    {
+                        "title": "Concierge Services: New Services Detected",
+                        "message": f"The following services have been configured:\n\n{service_list}\n\nEach service is now available as a device with its own sensor in Home Assistant.",
+                        "notification_id": f"concierge_services_new_{self._imap_data[CONF_EMAIL].replace('@', '_').replace('.', '_')}",
+                    },
+                )
+            
             return self.async_create_entry(  # type: ignore[return-value]
                 title=self._imap_data[CONF_EMAIL],
                 data=config_data,

@@ -11,6 +11,7 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
@@ -355,9 +356,19 @@ class ConciergeServiceSensor(CoordinatorEntity[ConciergeServicesCoordinator], Se
         super().__init__(coordinator)
         self._service_id = service_id
         self._service_name = service_name
+        self._config_entry = config_entry
         self._attr_name = f"Concierge Services - {service_name}"
         self._attr_unique_id = f"{config_entry.entry_id}_{service_id}"
         self._attr_icon = "mdi:file-document-outline"
+        
+        # Set device info to group this sensor under a service device
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"{config_entry.entry_id}_{service_id}")},
+            name=service_name,
+            manufacturer="Concierge Services",
+            model="Service Account",
+            via_device=(DOMAIN, config_entry.entry_id),
+        )
 
     @property
     def native_value(self) -> str | None:
@@ -417,9 +428,19 @@ class ConciergeServicesConnectionSensor(CoordinatorEntity[ConciergeServicesCoord
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
+        self._config_entry = config_entry
         self._attr_name = f"Concierge Services {config_entry.data[CONF_EMAIL]} Connection"
         self._attr_unique_id = f"{config_entry.entry_id}_connection"
         self._attr_icon = "mdi:email-check"
+        
+        # Set device info to group this sensor under the main integration device
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, config_entry.entry_id)},
+            name=f"Concierge Services ({config_entry.data[CONF_EMAIL]})",
+            manufacturer="Concierge Services",
+            model="Email Integration",
+            configuration_url="https://github.com/Geek-MD/Concierge_Services",
+        )
 
     @property
     def native_value(self) -> str:

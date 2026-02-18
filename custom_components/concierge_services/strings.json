@@ -19,12 +19,12 @@
       },
       "services": {
         "title": "Select Services to Monitor",
-        "description": "We detected the following services in your mailbox ({email}). Select which ones you want to monitor:",
+        "description": "We detected the following services in your mailbox ({email}). Select which ones you want to monitor. Each service will be created as a separate device with its own sensor:",
         "data": {
           "services": "Services to Monitor"
         },
         "data_description": {
-          "services": "Select one or more services to create sensors for"
+          "services": "Each selected service will appear as a device in Home Assistant"
         }
       }
     },
