@@ -11,7 +11,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import selector
+from homeassistant.helpers import area_registry as ar
 
 from .const import (
     DOMAIN,
@@ -19,10 +19,8 @@ from .const import (
     CONF_IMAP_PORT,
     CONF_EMAIL,
     CONF_PASSWORD,
-    CONF_SERVICES,
     DEFAULT_IMAP_PORT,
 )
-from .service_detector import detect_services_from_imap, DetectedService
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -79,7 +77,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call
     def __init__(self) -> None:
         """Initialize the config flow."""
         self._imap_data: dict[str, Any] = {}
-        self._detected_services: list[DetectedService] = []
 
     async def async_step_user(  # type: ignore[override]
         self, user_input: dict[str, Any] | None = None
@@ -102,105 +99,53 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
-                # Store IMAP data and proceed to service selection
+                # Store IMAP data and proceed to naming/area selection
                 self._imap_data = user_input
-                return await self.async_step_services()
+                return await self.async_step_finalize()
 
         return self.async_show_form(  # type: ignore[return-value]
             step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
         )
 
-    async def async_step_services(  # type: ignore[override]
+    async def async_step_finalize(  # type: ignore[override]
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle service selection step."""
+        """Handle the finalization step with friendly name and area."""
         errors: dict[str, str] = {}
         
-        # Detect services if not already done
-        if not self._detected_services:
-            try:
-                self._detected_services = await self.hass.async_add_executor_job(
-                    detect_services_from_imap,
-                    self._imap_data[CONF_IMAP_SERVER],
-                    self._imap_data[CONF_IMAP_PORT],
-                    self._imap_data[CONF_EMAIL],
-                    self._imap_data[CONF_PASSWORD],
-                )
-            except Exception as err:  # pylint: disable=broad-except
-                _LOGGER.exception("Error detecting services: %s", err)
-                errors["base"] = "service_detection_failed"
+        # Get available areas
+        area_registry = ar.async_get(self.hass)
+        areas = area_registry.async_list_areas()
+        area_options = {area.id: area.name for area in areas}
+        area_options[""] = "No area"
         
         if user_input is not None:
-            # Get selected services
-            selected_services = user_input.get(CONF_SERVICES, [])
-            
-            # Build services metadata
-            services_metadata = {}
-            for svc in self._detected_services:
-                if svc.service_id in selected_services:
-                    services_metadata[svc.service_id] = {
-                        "name": svc.service_name,
-                        "sample_from": svc.sample_from,
-                        "sample_subject": svc.sample_subject,
-                    }
-            
-            # Combine IMAP data with selected services and metadata
+            # Combine IMAP data with friendly name and area
             config_data = {
-                **self._imap_data, 
-                CONF_SERVICES: selected_services,
-                "services_metadata": services_metadata,
+                **self._imap_data,
+                "friendly_name": user_input.get("friendly_name", self._imap_data[CONF_EMAIL]),
+                "area_id": user_input.get("area_id", ""),
             }
             
-            # Create persistent notification for new services
-            if selected_services:
-                service_names = [services_metadata[sid]["name"] for sid in selected_services]
-                service_list = "\n".join([f"- {name}" for name in service_names])
-                
-                await self.hass.services.async_call(
-                    "persistent_notification",
-                    "create",
-                    {
-                        "title": "Concierge Services: New Services Detected",
-                        "message": f"The following services have been configured:\n\n{service_list}\n\nEach service is now available as a device with its own sensor in Home Assistant.",
-                        "notification_id": f"concierge_services_new_{self._imap_data[CONF_EMAIL].replace('@', '_').replace('.', '_')}",
-                    },
-                )
-            
             return self.async_create_entry(  # type: ignore[return-value]
-                title=self._imap_data[CONF_EMAIL],
+                title=user_input.get("friendly_name", self._imap_data[CONF_EMAIL]),
                 data=config_data,
             )
         
-        # Create schema for service selection
-        if self._detected_services:
-            service_options = [
-                selector.SelectOptionDict(
-                    value=svc.service_id,
-                    label=f"{svc.service_name} ({svc.email_count} emails)"
-                )
-                for svc in self._detected_services
-            ]
-            
-            services_schema = vol.Schema(
-                {
-                    vol.Required(CONF_SERVICES, default=[svc.service_id for svc in self._detected_services]): 
-                        selector.SelectSelector(
-                            selector.SelectSelectorConfig(
-                                options=service_options,
-                                multiple=True,
-                                mode=selector.SelectSelectorMode.LIST,
-                            )
-                        ),
-                }
-            )
-        else:
-            # No services detected, allow user to continue without services
-            services_schema = vol.Schema({})
-            errors["base"] = "no_services_detected"
+        # Create schema for finalization
+        finalize_schema = vol.Schema(
+            {
+                vol.Optional(
+                    "friendly_name",
+                    default=self._imap_data[CONF_EMAIL]
+                ): str,
+                vol.Optional("area_id", default=""): vol.In(area_options),
+            }
+        )
         
         return self.async_show_form(  # type: ignore[return-value]
-            step_id="services",
-            data_schema=services_schema,
+            step_id="finalize",
+            data_schema=finalize_schema,
             errors=errors,
             description_placeholders={
                 "email": self._imap_data[CONF_EMAIL],

@@ -17,23 +17,23 @@
           "password": "Use an app password for Gmail and Yahoo"
         }
       },
-      "services": {
-        "title": "Select Services to Monitor",
-        "description": "We detected the following services in your mailbox ({email}). Select which ones you want to monitor. Each service will be created as a separate device with its own sensor:",
+      "finalize": {
+        "title": "Finalize Configuration",
+        "description": "Configure the friendly name and area for the integration ({email})",
         "data": {
-          "services": "Services to Monitor"
+          "friendly_name": "Friendly Name",
+          "area_id": "Area"
         },
         "data_description": {
-          "services": "Each selected service will appear as a device in Home Assistant"
+          "friendly_name": "A descriptive name for this email account",
+          "area_id": "Associate this integration with a specific area (optional)"
         }
       }
     },
     "error": {
       "cannot_connect": "Failed to connect to IMAP server",
       "invalid_auth": "Invalid authentication",
-      "unknown": "Unexpected error",
-      "service_detection_failed": "Failed to detect services from mailbox",
-      "no_services_detected": "No services detected in mailbox. You can continue without selecting services."
+      "unknown": "Unexpected error"
     },
     "abort": {
       "already_configured": "This email account is already configured"

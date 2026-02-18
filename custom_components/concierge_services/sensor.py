@@ -429,14 +429,16 @@ class ConciergeServicesConnectionSensor(CoordinatorEntity[ConciergeServicesCoord
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._config_entry = config_entry
-        self._attr_name = f"Concierge Services {config_entry.data[CONF_EMAIL]} Connection"
+        self._attr_name = "Concierge Services - Status"
         self._attr_unique_id = f"{config_entry.entry_id}_connection"
         self._attr_icon = "mdi:email-check"
         
         # Set device info to group this sensor under the main integration device
+        # Use friendly_name if available, otherwise use email
+        friendly_name = config_entry.data.get("friendly_name", config_entry.data[CONF_EMAIL])
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, config_entry.entry_id)},
-            name=f"Concierge Services ({config_entry.data[CONF_EMAIL]})",
+            name=friendly_name,
             manufacturer="Concierge Services",
             model="Email Integration",
             configuration_url="https://github.com/Geek-MD/Concierge_Services",
