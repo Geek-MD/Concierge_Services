@@ -17,7 +17,6 @@ PLATFORMS: list[str] = []
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Concierge Services from a config entry."""
     hass.data.setdefault(DOMAIN, {})
-    
     # Store the config entry data
     hass.data[DOMAIN][entry.entry_id] = entry.data
     

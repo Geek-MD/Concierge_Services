@@ -38,7 +38,6 @@ async def validate_imap_connection(
     hass: HomeAssistant, data: dict[str, Any]
 ) -> dict[str, Any]:
     """Validate the IMAP connection."""
-    
     def _test_connection():
         """Test IMAP connection in executor."""
         try:
