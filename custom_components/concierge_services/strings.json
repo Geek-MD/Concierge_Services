@@ -16,12 +16,24 @@
           "email": "Example: user@gmail.com",
           "password": "Use an app password for Gmail and Yahoo"
         }
+      },
+      "services": {
+        "title": "Select Services to Monitor",
+        "description": "We detected the following services in your mailbox ({email}). Select which ones you want to monitor:",
+        "data": {
+          "services": "Services to Monitor"
+        },
+        "data_description": {
+          "services": "Select one or more services to create sensors for"
+        }
       }
     },
     "error": {
       "cannot_connect": "Failed to connect to IMAP server",
       "invalid_auth": "Invalid authentication",
-      "unknown": "Unexpected error"
+      "unknown": "Unexpected error",
+      "service_detection_failed": "Failed to detect services from mailbox",
+      "no_services_detected": "No services detected in mailbox. You can continue without selecting services."
     },
     "abort": {
       "already_configured": "This email account is already configured"
