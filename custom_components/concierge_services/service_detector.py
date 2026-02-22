@@ -9,6 +9,14 @@ from dataclasses import dataclass
 from email.header import decode_header
 from typing import Any
 
+from .const import (
+    SERVICE_TYPE_ELECTRICITY,
+    SERVICE_TYPE_GAS,
+    SERVICE_TYPE_TELECOM,
+    SERVICE_TYPE_UNKNOWN,
+    SERVICE_TYPE_WATER,
+)
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -18,6 +26,7 @@ class DetectedService:
 
     service_name: str
     service_id: str
+    service_type: str
     sample_subject: str
     sample_from: str
     email_count: int
@@ -36,19 +45,23 @@ BILLING_INDICATORS = [
     r"dte|documento tributario|electronica",
 ]
 
-# Common service providers patterns (generic)
-SERVICE_PATTERNS = [
-    # Utilities
-    (r"aguas?\s+andinas?", "Aguas Andinas"),
-    (r"enel|chilectra|cge\s+distribuci[oó]n", "Electricidad"),
-    (r"metrogas|lipigas|gasco", "Gas"),
-    (r"essbio|esval|nuevo sur", "Agua"),
+# Common service providers patterns: (regex, display_name, service_type)
+# service_type must be one of the SERVICE_TYPE_* constants from const.py.
+SERVICE_PATTERNS: list[tuple[str, str, str]] = [
+    # Water utilities
+    (r"aguas?\s+andinas?", "Aguas Andinas", SERVICE_TYPE_WATER),
+    (r"essbio|esval|nuevo\s+sur", "Agua", SERVICE_TYPE_WATER),
+    # Electricity utilities
+    (r"enel|chilectra|cge\s+distribuci[oó]n", "Electricidad", SERVICE_TYPE_ELECTRICITY),
+    # Gas utilities
+    (r"metrogas|lipigas|gasco", "Gas", SERVICE_TYPE_GAS),
     # Telecom
-    (r"movistar|entel|claro|wom|vtr", "Telecomunicaciones"),
-    # Internet/Cable
-    (r"mundo.*pac[íi]fico|gtd|telefonica", "Internet/TV"),
-    # Generic utility patterns
-    (r"compa[ñn][íi]a\s+de\s+(agua|electricidad|gas)", "Servicios Básicos"),
+    (r"movistar|entel|claro|wom|vtr", "Telecomunicaciones", SERVICE_TYPE_TELECOM),
+    (r"mundo.*pac[íi]fico|gtd|telefonica", "Internet/TV", SERVICE_TYPE_TELECOM),
+    # Generic utility fallback (type resolved at runtime from keyword)
+    (r"compa[ñn][íi]a\s+de\s+agua", "Agua", SERVICE_TYPE_WATER),
+    (r"compa[ñn][íi]a\s+de\s+electricidad", "Electricidad", SERVICE_TYPE_ELECTRICITY),
+    (r"compa[ñn][íi]a\s+de\s+gas", "Gas", SERVICE_TYPE_GAS),
 ]
 
 
@@ -137,22 +150,22 @@ def _is_billing_email(from_addr: str, subject: str, body: str) -> bool:
     return False
 
 
-def _extract_service_name(from_addr: str, subject: str, body: str) -> tuple[str, str] | None:
+def _extract_service_name(from_addr: str, subject: str, body: str) -> tuple[str, str, str] | None:
     """
-    Extract service name from email content.
-    
+    Extract service name and type from email content.
+
     Returns:
-        Tuple of (service_name, service_id) or None if not identifiable
+        Tuple of (service_name, service_id, service_type) or None if not identifiable
     """
     combined_text = f"{from_addr} {subject} {body}"
-    
+
     # Try to match against known service patterns
-    for pattern, service_name in SERVICE_PATTERNS:
+    for pattern, service_name, service_type in SERVICE_PATTERNS:
         if re.search(pattern, combined_text, re.IGNORECASE):
             # Create a normalized service_id
             service_id = re.sub(r'[^a-z0-9]+', '_', service_name.lower())
-            return (service_name, service_id)
-    
+            return (service_name, service_id, service_type)
+
     # If no specific match, try to extract company name from sender domain
     domain_match = re.search(r'@([a-zA-Z0-9\-]+)\.[a-zA-Z]+', from_addr)
     if domain_match:
@@ -161,13 +174,13 @@ def _extract_service_name(from_addr: str, subject: str, body: str) -> tuple[str,
         domain = re.sub(r'^(admin|noreply|info|facturacion|dte|no-reply)', '', domain, flags=re.IGNORECASE)
         domain = re.sub(r'(admin|cl)$', '', domain, flags=re.IGNORECASE)
         domain = domain.strip('-_')
-        
+
         if len(domain) > 3:  # Avoid very short domain parts
             # Capitalize first letter of each word
             service_name = ' '.join(word.capitalize() for word in re.split(r'[-_]', domain))
             service_id = re.sub(r'[^a-z0-9]+', '_', domain.lower())
-            return (service_name, service_id)
-    
+            return (service_name, service_id, SERVICE_TYPE_UNKNOWN)
+
     # Try to extract from subject (look for company names in uppercase)
     # Pattern: consecutive uppercase words that might be a company name
     uppercase_matches = re.findall(r'\b[A-ZÁÉÍÓÚÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÑ]{2,}){0,3}\s+S\.?A\.?', subject)
@@ -176,8 +189,8 @@ def _extract_service_name(from_addr: str, subject: str, body: str) -> tuple[str,
         # Clean up
         company_name = re.sub(r'\s+S\.?A\.?$', '', company_name)
         service_id = re.sub(r'[^a-z0-9]+', '_', company_name.lower())
-        return (company_name.title(), service_id)
-    
+        return (company_name.title(), service_id, SERVICE_TYPE_UNKNOWN)
+
     return None
 
 
@@ -263,13 +276,14 @@ def detect_services_from_imap(
                 service_info = _extract_service_name(from_addr, subject, body)
                 
                 if service_info:
-                    service_name, service_id = service_info
-                    
+                    service_name, service_id, service_type = service_info
+
                     # Add or update detected service
                     if service_id not in detected_services:
                         detected_services[service_id] = {
                             "name": service_name,
                             "id": service_id,
+                            "type": service_type,
                             "sample_subject": subject,
                             "sample_from": from_addr,
                             "count": 1,
@@ -299,6 +313,7 @@ def detect_services_from_imap(
         DetectedService(
             service_name=svc["name"],
             service_id=svc["id"],
+            service_type=svc["type"],
             sample_subject=svc["sample_subject"],
             sample_from=svc["sample_from"],
             email_count=svc["count"],
@@ -325,3 +340,23 @@ def get_service_patterns_for_id(service_id: str) -> dict[str, Any]:
         "subject_patterns": [],
         "body_patterns": [service_id.replace('_', '.*')],
     }
+
+
+def classify_service_type(from_addr: str, subject: str) -> str:
+    """Classify the service type from the email sender and subject.
+
+    This can be used when service metadata does not already carry a type,
+    e.g. for services detected in earlier versions of the integration.
+
+    Args:
+        from_addr: Decoded ``From`` header of the email.
+        subject:   Decoded ``Subject`` header of the email.
+
+    Returns:
+        One of the SERVICE_TYPE_* constants.
+    """
+    combined = f"{from_addr} {subject}"
+    for pattern, _name, service_type in SERVICE_PATTERNS:
+        if re.search(pattern, combined, re.IGNORECASE):
+            return service_type
+    return SERVICE_TYPE_UNKNOWN
