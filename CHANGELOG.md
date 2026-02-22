@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-02-22
+
+### Fixed
+- **Garbage Attribute Extraction**: Emails with HTML bodies no longer produce spurious
+  attributes such as `https`, `lifecycle`, `javaxportletaction`, or `strong_class`.
+  The email body extractor now prefers `text/plain` parts; when only `text/html` is
+  available, HTML tags and attributes are stripped before attribute extraction.
+- **HTML Entity Leakage**: Key-value pairs whose values contain raw HTML entities
+  (`&amp;`, `&gt;`, `&lt;`, etc.) are now discarded as unstripped-HTML artefacts.
+- **Over-broad Field Matching**: `_is_relevant_field()` no longer accepts every short
+  key as relevant; a key must now contain at least one billing-domain indicator term
+  from `FIELD_INDICATORS` to be included.
+
 ## [0.3.0] - 2026-02-21
 
 ### Added

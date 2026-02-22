@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import re
+from html.parser import HTMLParser
 from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
@@ -56,6 +57,24 @@ ID_PATTERNS = [
 ]
 
 
+def _strip_html(html: str) -> str:
+    """Strip HTML tags and decode entities, returning only visible text."""
+    class _TextExtractor(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__()
+            self._parts: list[str] = []
+
+        def handle_data(self, data: str) -> None:
+            self._parts.append(data)
+
+        def get_text(self) -> str:
+            return "\n".join(self._parts)
+
+    parser = _TextExtractor()
+    parser.feed(html)
+    return parser.get_text()
+
+
 def _normalize_key(key: str) -> str:
     """Normalize a key name for storage."""
     # Remove special characters and normalize
@@ -81,53 +100,49 @@ def _normalize_value(value: str) -> str:
 def _is_relevant_field(key: str) -> bool:
     """Check if a field name seems relevant based on common indicators."""
     key_lower = key.lower()
-    
-    # Check if key contains any relevant indicator
+
     for indicator in FIELD_INDICATORS:
         if indicator in key_lower:
             return True
-    
-    # Check if it's a short field name (likely a label)
-    words = key.split()
-    if len(words) <= 5 and len(key) >= 3:
-        return True
-    
+
     return False
 
 
 def _extract_key_value_pairs(text: str) -> dict[str, str]:
     """Extract key-value pairs from text using heuristic patterns."""
     pairs: dict[str, str] = {}
-    
-    # Try different patterns
+
+    # Matches HTML entities — indicates unstripped HTML content that should be ignored
+    _html_entity_re = re.compile(r"&(?:amp|lt|gt|quot|nbsp|apos);", re.IGNORECASE)
+
     for pattern in KEY_VALUE_PATTERNS:
         matches = re.finditer(pattern, text, re.MULTILINE | re.IGNORECASE)
-        
+
         for match in matches:
             key = match.group(1).strip()
             value = match.group(2).strip()
-            
-            # Skip if key is too long (probably not a label)
+
             if len(key) > 50:
                 continue
-            
-            # Skip if value is too short (probably not meaningful)
+
             if len(value) < 1:
                 continue
-            
-            # Skip if value contains too many special characters (probably formatting)
+
+            # Skip values that contain HTML entities (raw HTML leaked through)
+            if _html_entity_re.search(value):
+                continue
+
+            # Skip values with repeated special characters (formatting noise)
             if len(re.findall(r'[=\-_\*]{3,}', value)) > 0:
                 continue
-            
-            # Check if this seems like a relevant field
+
             if _is_relevant_field(key):
                 normalized_key = _normalize_key(key)
                 normalized_value = _normalize_value(value)
-                
-                # Only store if we don't have it yet (prefer first occurrence)
+
                 if normalized_key not in pairs and normalized_value:
                     pairs[normalized_key] = normalized_value
-    
+
     return pairs
 
 
@@ -278,7 +293,7 @@ def _extract_from_subject(subject: str) -> dict[str, str]:
     for pattern in folio_patterns:
         match = re.search(pattern, subject, re.IGNORECASE)
         if match:
-            attrs["folio_from_subject"] = match.group(1)
+            attrs["_folio_from_subject"] = match.group(1)
             break
     
     # Extract RUT from subject if present
@@ -323,29 +338,39 @@ def extract_attributes_from_email(msg: Any) -> dict[str, Any]:
     body = ""
     try:
         if msg.is_multipart():
+            plain_parts: list[str] = []
+            html_parts: list[str] = []
+
             for part in msg.walk():
                 content_type = part.get_content_type()
                 content_disposition = str(part.get("Content-Disposition", ""))
-                
-                # Skip attachments
+
                 if "attachment" in content_disposition:
                     continue
-                
-                # Get text content
-                if content_type in ["text/plain", "text/html"]:
-                    try:
-                        payload = part.get_payload(decode=True)
-                        if payload:
-                            charset = part.get_content_charset() or "utf-8"
-                            body += payload.decode(charset, errors="ignore") + " "  # type: ignore[union-attr]
-                    except Exception:
-                        pass
+
+                try:
+                    payload = part.get_payload(decode=True)
+                    if payload:
+                        charset = part.get_content_charset() or "utf-8"
+                        text = payload.decode(charset, errors="ignore")  # type: ignore[union-attr]
+                        if content_type == "text/plain":
+                            plain_parts.append(text)
+                        elif content_type == "text/html":
+                            html_parts.append(text)
+                except Exception:
+                    pass
+
+            if plain_parts:
+                body = " ".join(plain_parts)
+            elif html_parts:
+                body = _strip_html(" ".join(html_parts))
         else:
             try:
                 payload = msg.get_payload(decode=True)
                 if payload:
                     charset = msg.get_content_charset() or "utf-8"
-                    body = payload.decode(charset, errors="ignore")  # type: ignore[union-attr]
+                    raw = payload.decode(charset, errors="ignore")  # type: ignore[union-attr]
+                    body = _strip_html(raw) if msg.get_content_type() == "text/html" else raw
             except Exception:
                 pass
     except Exception as err:

@@ -27,7 +27,7 @@ from .const import (
     CONF_PASSWORD,
     CONF_SERVICES,
 )
-from .attribute_extractor import extract_attributes_from_email_body
+from .attribute_extractor import extract_attributes_from_email_body, _strip_html
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -234,41 +234,51 @@ class ConciergeServicesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return result
     
     def _get_email_body(self, msg: email.message.Message) -> str:
-        """Extract text content from email body."""
+        """Extract text content from email body, preferring plain text over HTML."""
         body = ""
-        
+
         try:
-            # Handle multipart emails
             if msg.is_multipart():
+                plain_parts: list[str] = []
+                html_parts: list[str] = []
+
                 for part in msg.walk():
                     content_type = part.get_content_type()
                     content_disposition = str(part.get("Content-Disposition", ""))
-                    
-                    # Skip attachments
+
                     if "attachment" in content_disposition:
                         continue
-                    
-                    # Get text/plain or text/html content
-                    if content_type in ["text/plain", "text/html"]:
-                        try:
-                            payload = part.get_payload(decode=True)
-                            if payload:
-                                charset = part.get_content_charset() or "utf-8"
-                                body += payload.decode(charset, errors="ignore") + " "  # type: ignore[union-attr]
-                        except Exception:
-                            pass
+
+                    try:
+                        payload = part.get_payload(decode=True)
+                        if not payload:
+                            continue
+                        charset = part.get_content_charset() or "utf-8"
+                        text = payload.decode(charset, errors="ignore")  # type: ignore[union-attr]
+                        if content_type == "text/plain":
+                            plain_parts.append(text)
+                        elif content_type == "text/html":
+                            html_parts.append(text)
+                    except Exception:
+                        pass
+
+                # Prefer plain text; fall back to stripped HTML to avoid tag/URL noise
+                if plain_parts:
+                    body = " ".join(plain_parts)
+                elif html_parts:
+                    body = _strip_html(" ".join(html_parts))
             else:
-                # Handle non-multipart emails
                 try:
                     payload = msg.get_payload(decode=True)
                     if payload:
                         charset = msg.get_content_charset() or "utf-8"
-                        body = payload.decode(charset, errors="ignore")  # type: ignore[union-attr]
+                        raw = payload.decode(charset, errors="ignore")  # type: ignore[union-attr]
+                        body = _strip_html(raw) if msg.get_content_type() == "text/html" else raw
                 except Exception:
                     pass
         except Exception as err:
             _LOGGER.debug("Error extracting email body: %s", err)
-        
+
         return body
     
     def _has_attachments(self, msg: email.message.Message) -> bool:
