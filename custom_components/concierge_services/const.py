@@ -11,3 +11,10 @@ CONF_SERVICES = "services"  # List of service IDs to configure
 
 # Default values
 DEFAULT_IMAP_PORT = 993
+
+# Service type constants used to route to the appropriate extraction tools
+SERVICE_TYPE_WATER = "water"
+SERVICE_TYPE_GAS = "gas"
+SERVICE_TYPE_ELECTRICITY = "electricity"
+SERVICE_TYPE_TELECOM = "telecom"
+SERVICE_TYPE_UNKNOWN = "unknown"

@@ -26,8 +26,10 @@ from .const import (
     CONF_EMAIL,
     CONF_PASSWORD,
     CONF_SERVICES,
+    SERVICE_TYPE_UNKNOWN,
 )
 from .attribute_extractor import extract_attributes_from_email_body, _strip_html
+from .service_detector import classify_service_type
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -172,6 +174,10 @@ class ConciergeServicesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             sample_from = service_meta.get("sample_from", "")
             sample_subject = service_meta.get("sample_subject", "")
             service_name = service_meta.get("name", "")
+            # Resolve service type — fall back to classifier for legacy entries
+            service_type: str = service_meta.get("type") or classify_service_type(
+                sample_from, sample_subject
+            )
             
             for email_id in reversed(email_ids):  # Start from most recent
                 try:
@@ -213,7 +219,9 @@ class ConciergeServicesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                                     latest_date = email_date
                                     
                                     # Extract attributes from this email
-                                    latest_attributes = extract_attributes_from_email_body(subject, body)
+                                    latest_attributes = extract_attributes_from_email_body(
+                                        subject, body, service_type
+                                    )
                             except Exception:
                                 pass
                         
@@ -404,6 +412,9 @@ class ConciergeServiceSensor(CoordinatorEntity[ConciergeServicesCoordinator], Se
         attrs: dict[str, Any] = {
             "service_id": self._service_id,
             "service_name": self._service_name,
+            "service_type": self._config_entry.data.get("services_metadata", {})
+                .get(self._service_id, {})
+                .get("type", SERVICE_TYPE_UNKNOWN),
         }
         
         if self.coordinator.data:

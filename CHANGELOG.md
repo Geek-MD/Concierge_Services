@@ -5,6 +5,81 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2026-02-22
+
+### Added
+- **Service-Type Constants** (`const.py`): Added `SERVICE_TYPE_WATER`, `SERVICE_TYPE_GAS`,
+  `SERVICE_TYPE_ELECTRICITY`, `SERVICE_TYPE_TELECOM`, and `SERVICE_TYPE_UNKNOWN` constants
+  to classify detected services.
+
+- **Modular Type-Specific Extractors** (`attribute_extractor.py`): Extraction tools are
+  now organised by service type so each utility category can use patterns tuned to its
+  own email format:
+
+  | Service type  | Extra attributes extracted |
+  |---|---|
+  | `water`       | `consumption_m3`, `meter_reading`, `meter_number` |
+  | `gas`         | `total_amount` (plain-number override), `metropuntos`, `consumption_m3` (label-based only) |
+  | `electricity` | `consumption_kwh`, `contracted_power_kw` *(skeleton — patterns refined once email samples arrive)* |
+
+  The water extractor is tuned for Aguas Andinas.
+  The gas extractor is tuned for Metrogas (January 2026 reference email).
+  The electricity extractor uses generic patterns as placeholders.
+
+- **`due_date` extraction** (`attribute_extractor.py`): New generic extractor
+  (`_extract_due_date`) searches for `Fecha de vencimiento` label, adding a
+  `due_date` attribute to all service types.  Confirmed present in Metrogas emails.
+
+- **`_extract_type_specific_attributes` routing helper** (`attribute_extractor.py`):
+  Dispatches to the correct type-specific extractor based on `service_type`.
+
+- **`classify_service_type` utility** (`service_detector.py`): Public function that
+  infers the service type from the email `From` address and `Subject` line.  Used as
+  a fallback for services whose metadata pre-dates this release.
+
+### Changed
+- **`_CUSTOMER_LABELS`** (`attribute_extractor.py`): Made `de` optional in
+  `Número de Cliente` / `Número Cliente` so both forms are matched
+  (Metrogas uses `Número Cliente:` without `de`).
+
+- **`_extract_from_subject` folio patterns** (`attribute_extractor.py`): Added
+  `r"nro\.?\s+([0-9]{6,})"` to capture Metrogas subject format
+  `Boleta Metrogas Nro. 0000000061778648`.
+
+- **`SERVICE_PATTERNS`** (`service_detector.py`): Each tuple now carries a third element —
+  the service type — so the type is known at detection time rather than being inferred
+  later.  Generic company patterns split by utility type for accurate classification.
+
+- **`DetectedService` dataclass** (`service_detector.py`): Added `service_type` field.
+
+- **`_extract_service_name`** (`service_detector.py`): Returns a 3-tuple
+  `(service_name, service_id, service_type)` instead of a 2-tuple.
+
+- **`extract_attributes_from_email_body`** (`attribute_extractor.py`): Accepts an
+  optional `service_type` parameter (default `"unknown"`).  When provided, the
+  appropriate type-specific extractor runs and its results are merged into the output.
+
+- **`ConciergeServiceSensor.extra_state_attributes`** (`sensor.py`): Now exposes
+  `service_type` as a state attribute so it is visible in the Home Assistant UI.
+
+- **`ConciergeServicesCoordinator._find_latest_email_for_service`** (`sensor.py`):
+  Reads `service_type` from stored metadata; falls back to `classify_service_type` for
+  legacy entries that were configured before this release.
+
+- **Config flow `async_step_detect_services`** (`config_flow.py`): Stores `service_type`
+  in `services_metadata` alongside the existing name and sample headers.
+
+### Gas extractor details (Metrogas reference email)
+The Metrogas HTML-only email (`pagoenlinea@emailmetrogas.cl`) carries:
+- Folio in subject as `Boleta Metrogas Nro. <number>` (no `$` sign on totals)
+- `Número Cliente:` label (without `de`)
+- `Dirección:` address
+- `Período de consumo: dd/mm/yyyy al dd/mm/yyyy`
+- `Total a pagar: <plain number>` — no `$` prefix
+- `Fecha de vencimiento: dd/mm/yyyy`
+- `Metropuntos: <number>` — loyalty points balance
+- Gas consumption (m³) is **not** in the email body; it lives only in the PDF
+
 ## [0.3.2] - 2026-02-22
 
 ### Changed

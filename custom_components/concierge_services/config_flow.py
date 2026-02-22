@@ -174,6 +174,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call
             for service in self._detected_services:
                 self._services_metadata[service.service_id] = {
                     "name": service.service_name,
+                    "type": service.service_type,
                     "sample_subject": service.sample_subject,
                     "sample_from": service.sample_from,
                     "email_count": service.email_count,
