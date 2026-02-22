@@ -167,18 +167,19 @@ def _extract_currency_amounts(text: str) -> dict[str, str]:
 def _extract_dates(text: str) -> dict[str, str]:
     """Extract dates from text."""
     dates: dict[str, str] = {}
-    
+
+    _DATE_KEYS = ["billing_period_start", "billing_period_end", "due_date"]
+
     for pattern in DATE_PATTERNS:
         matches = re.finditer(pattern, text, re.IGNORECASE)
-        
+
         for i, match in enumerate(matches):
             date = match.group(1).strip()
-            
-            # Store with generic key
-            key = f"fecha_{i + 1}" if i > 0 else "fecha"
+
+            key = _DATE_KEYS[i] if i < len(_DATE_KEYS) else f"date_{i + 1}"
             if key not in dates:
                 dates[key] = date
-    
+
     return dates
 
 
