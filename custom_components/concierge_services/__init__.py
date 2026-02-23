@@ -5,7 +5,6 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN
 
@@ -18,41 +17,30 @@ PLATFORMS: list[str] = ["sensor"]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Concierge Services from a config entry."""
     hass.data.setdefault(DOMAIN, {})
-    # Store the config entry data
-    hass.data[DOMAIN][entry.entry_id] = entry.data
-    
-    # Create main device and assign to area if specified
-    device_registry = dr.async_get(hass)
-    device = device_registry.async_get_or_create(
-        config_entry_id=entry.entry_id,
-        identifiers={(DOMAIN, entry.entry_id)},
-        name=entry.data.get("friendly_name", entry.data.get("email")),
-        manufacturer="Concierge Services",
-        model="Email Integration",
-        configuration_url="https://github.com/Geek-MD/Concierge_Services",
-    )
-    
-    # Associate device with area if specified
-    area_id = entry.data.get("area_id")
-    if area_id:
-        device_registry.async_update_device(device.id, area_id=area_id)
-    
-    # Forward the setup to the platform (when we have platforms)
+    # Forward the setup to the sensor platform
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    
+
+    # Reload the entry whenever it is updated (options changed, subentries
+    # added/removed) so that sensors are recreated with the latest config.
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+
     _LOGGER.info(
-        "Concierge Services integration loaded for %s (friendly name: %s)",
+        "Concierge Services integration loaded for %s",
         entry.data.get("email"),
-        entry.data.get("friendly_name", entry.data.get("email")),
     )
-    
+
     return True
+
+
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the config entry when options or subentries change."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    # Unload platforms (when we have platforms)
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        hass.data[DOMAIN].pop(entry.entry_id)
-    
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+
     return unload_ok
+
