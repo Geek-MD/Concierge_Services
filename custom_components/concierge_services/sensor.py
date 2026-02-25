@@ -67,7 +67,7 @@ async def async_setup_entry(
     entities.append(ConciergeServicesConnectionSensor(coordinator, config_entry))
 
     # One service sensor per subentry
-    for subentry_id, subentry in config_entry.subentries.items():
+    for subentry_id, subentry in config_entry.subentries.items():  # type: ignore[attr-defined]
         entities.append(
             ConciergeServiceSensor(coordinator, config_entry, subentry_id, subentry.data)
         )
@@ -116,7 +116,8 @@ class ConciergeServicesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             result["connection_status"] = "OK"
 
             # Fetch data for each subentry (service device)
-            for subentry_id, subentry in self.config_entry.subentries.items():
+            assert self.config_entry is not None
+            for subentry_id, subentry in self.config_entry.subentries.items():  # type: ignore[attr-defined]
                 service_data = self._find_latest_email_for_service(imap, subentry.data)
                 result["services"][subentry_id] = service_data
 

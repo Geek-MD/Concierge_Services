@@ -90,7 +90,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call
     @callback
     def async_get_supported_subentry_types(
         cls, config_entry: config_entries.ConfigEntry
-    ) -> dict[str, type[config_entries.ConfigSubentryFlow]]:
+    ) -> dict[str, type[config_entries.ConfigSubentryFlow]]:  # type: ignore[name-defined]
         """Return the subentry types supported by this integration."""
         return {"service": ServiceSubentryFlowHandler}
 
@@ -206,7 +206,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 # ---------------------------------------------------------------------------
 
 
-class ServiceSubentryFlowHandler(config_entries.ConfigSubentryFlow):
+class ServiceSubentryFlowHandler(config_entries.ConfigSubentryFlow):  # type: ignore[name-defined]
     """Handle adding or reconfiguring a Concierge Services service device.
 
     Each subentry represents one service account (e.g. Aguas Andinas).
