@@ -164,7 +164,7 @@ class ConciergeServicesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return result
 
             email_ids = messages[0].split()
-            email_ids = email_ids[-50:]
+            email_ids = email_ids[-100:]
 
             latest_date = None
             latest_attributes: dict[str, Any] = {}
@@ -223,6 +223,14 @@ class ConciergeServicesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             result["last_updated"] = latest_date
             result["attributes"] = latest_attributes
+
+            if latest_date is None:
+                _LOGGER.warning(
+                    "No matching email found for service '%s' (id: %s) in the last %d emails",
+                    service_data.get(CONF_SERVICE_NAME, ""),
+                    service_data.get(CONF_SERVICE_ID, ""),
+                    len(email_ids),
+                )
 
             return result
 

@@ -5,7 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.3] - 2026-02-25
+## [0.4.4] - 2026-02-25
+
+### Fixed
+- **`ValueError` when reconfiguring a service account** (`config_flow.py`):
+  `ServiceSubentryFlowHandler.async_step_reconfigure` was calling `self.async_create_entry()`
+  which is only valid when `source == user`.  For reconfigure flows the correct method is
+  `self.async_update_and_abort()`, which updates the subentry data in-place and closes the
+  flow without creating a duplicate entry.
+- **Service entity shows no data after being added** (`sensor.py`):
+  `_find_latest_email_for_service` was only scanning the last 50 emails in the inbox,
+  while `service_detector.py` scans the last 100.  When the most recent billing email for
+  a service was beyond the first 50, the sensor would not find it and the entity state
+  would remain empty.  The limit has been raised to 100 to match the detector.
+  A `WARNING`-level log message is now emitted when no matching email is found for a
+  service, making future diagnosis visible in the HA log without requiring debug logging.
+
+### Changed
+- **`manifest.json`**: Version bumped to `0.4.4`.
+
+
 
 ### Fixed
 - **`AttributeError` when adding a service device** (`config_flow.py`): `ServiceSubentryFlowHandler`
