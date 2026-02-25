@@ -5,7 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0] - 2026-02-22
+## [0.4.2] - 2026-02-23
+
+### Added
+- **`integration_type: "hub"`** (`manifest.json`): Marks the integration as a hub so Home
+  Assistant displays it like the MQTT integration — with a **CONFIGURE** button and an
+  **ADD DEVICE** button on the integration card.
+- **`single_config_entry: true`** (`manifest.json`): Only one Concierge Services instance
+  (one monitored email account) is allowed at a time.
+- **Options Flow** (`config_flow.py` → `OptionsFlowHandler`): The **CONFIGURE** button
+  opens a pre-filled form to reconfigure the IMAP credentials and friendly name without
+  deleting and re-adding the integration.
+- **Subentry Flow** (`config_flow.py` → `ServiceSubentryFlowHandler`): The **ADD DEVICE**
+  button scans the inbox, filters out services already added, and lets the user select one
+  new service account to add as a device. Each device also supports a **reconfigure** step
+  so the service name can be updated via the UI.
+- **New constants** (`const.py`): `CONF_SERVICE_ID`, `CONF_SERVICE_NAME`,
+  `CONF_SERVICE_TYPE`, `CONF_SAMPLE_FROM`, `CONF_SAMPLE_SUBJECT` — used as keys in
+  subentry data instead of the old flat `services_metadata` dict.
+- **Subentry strings** (`strings.json`, `translations/en.json`, `translations/es.json`):
+  New `config_subentries.service` section with step, error, and abort messages for the
+  add-device and reconfigure flows.
+
+### Changed
+- **Initial config flow** (`config_flow.py`): Simplified to two steps only — IMAP
+  credentials (`user`) and friendly name (`finalize`). Service detection during initial
+  setup has been removed; services are added individually after setup via ADD DEVICE.
+- **`sensor.py`**: `async_setup_entry` now iterates over `config_entry.subentries` to
+  create service sensors, instead of reading from the old `services` / `services_metadata`
+  keys in `config_entry.data`. The coordinator reads effective credentials from
+  `{**entry.data, **entry.options}` so options-flow changes are respected without
+  needing to reconfigure from scratch.
+- **`__init__.py`**: Removed explicit device-registry calls (devices are created via
+  `DeviceInfo` in the sensor entities). Added an `add_update_listener` so the entry
+  reloads automatically when options or subentries change.
+- **`manifest.json`**: Version bumped to `0.4.2`.
+
+### Removed
+- `CONF_SERVICES` constant from `const.py` (replaced by individual subentries).
+- `area_id` support from the initial config flow (areas can still be assigned from the
+  device card after setup).
+- `detect_services` and `select_services` steps from the initial config flow.
+
+### Migration note
+Existing config entries from v0.4.0/v0.4.1 will continue to load (the connection sensor
+works without subentries). Previously configured service sensors will not appear
+automatically — use the **ADD DEVICE** button to re-add them as subentries.
+
 
 ### Added
 - **Service-Type Constants** (`const.py`): Added `SERVICE_TYPE_WATER`, `SERVICE_TYPE_GAS`,
