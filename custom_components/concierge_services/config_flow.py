@@ -297,6 +297,8 @@ class ServiceSubentryFlowHandler(config_entries.ConfigSubentryFlow):  # type: ig
         if user_input is not None:
             new_name = user_input.get(CONF_SERVICE_NAME) or current.get(CONF_SERVICE_NAME, "")
             return self.async_update_and_abort(  # type: ignore[return-value]
+                self._get_entry(),  # type: ignore[attr-defined]
+                subentry,
                 title=new_name,
                 data={**current, CONF_SERVICE_NAME: new_name},
             )

@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.5] - 2026-02-26
+
+### Fixed
+- **`TypeError` when reconfiguring a service subentry** (`config_flow.py`):
+  `ServiceSubentryFlowHandler.async_step_reconfigure` was calling
+  `self.async_update_and_abort()` without the two required positional arguments
+  `entry` and `subentry`.  Added `self._get_entry()` and the already-retrieved
+  `subentry` object as the first two arguments so the call matches the
+  `ConfigSubentryFlow.async_update_and_abort(entry, subentry, ...)` signature.
+
+### Changed
+- **`manifest.json`**: Version bumped to `0.4.5`.
+
 ## [0.4.4] - 2026-02-25
 
 ### Fixed
